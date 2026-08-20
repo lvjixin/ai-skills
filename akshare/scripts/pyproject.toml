@@ -6,9 +6,9 @@ dependencies = [
     "akshare>=1.18.92",
 ]
 
-# 本项目是两个独立的 CLI 脚本而非包，显式声明避免 setuptools flat-layout 自动发现歧义
+# 本项目是三个独立的 CLI 脚本而非包，显式声明避免 setuptools flat-layout 自动发现歧义
 [tool.setuptools]
-py-modules = ["call_interface", "search_interface"]
+py-modules = ["call_interface", "search_interface", "market_analysis"]
 
 [dependency-groups]
 dev = [
@@ -21,3 +21,4 @@ dev = [
 [tool.ruff.lint.per-file-ignores]
 "call_interface.py" = ["BLE001"]
 "search_interface.py" = ["BLE001"]
+"market_analysis.py" = ["BLE001"]

@@ -90,6 +90,31 @@ uv run python call_interface.py stock_zh_a_hist \
 uv run python call_interface.py bond_cb_jsl --format json
 ```
 
+## 脚本三：市场资金流向分析 market_analysis.py
+
+一键输出当日 A 股市场资金流向报告，无需参数：
+
+```bash
+uv run python market_analysis.py
+```
+
+报告按以下板块顺序输出：
+
+| 板块 | 数据源 | 内容 |
+|---|---|---|
+| 沪深重要指数 | 新浪（`stock_zh_index_spot_sina`） | 上证/深成/创业板/科创50/沪深300/中证500/中证1000/上证50 行情 + 两市合计成交额 |
+| 大盘资金流向 | 东方财富 push2his 直连 | 最新交易日主力/超大单/大单/中单/小单净流入与净占比 |
+| 行业资金流 | 同花顺（`stock_fund_flow_industry`） | 净流入 TOP10、净流出 TOP5、全行业汇总 |
+| 概念资金流 | 同花顺（`stock_fund_flow_concept`） | 净流入 TOP10、净流出 TOP5 |
+| 个股资金流 | 同花顺（`stock_fund_flow_individual`） | 净流入 TOP10、净流出 TOP5（金额统一换算为亿元） |
+
+**要点：**
+
+- 全部取数带自动重试（默认 4 次、间隔 3 秒），数据源偶发失败可自动恢复；单次运行失败会给出明确错误消息。
+- AKShare 未提供大盘资金流接口，该板块直连东方财富 push2his 接口补齐，网络或数据源变更时可能失败。
+- 同花顺接口返回的个股金额为带"亿/万"后缀的字符串，脚本已统一换算为亿元。
+- 行业/概念/个股的净流入 TOP10 与净流出 TOP5 为即时数据，交易日盘中多次运行即可跟踪资金动向变化。
+
 ## 通用注意事项
 
 - 执行取数接口会联网访问数据源，可能因网络或数据源变更失败，重试或换接口即可。
