@@ -1,0 +1,12 @@
+{
+  "name": "ai-skills",
+  "displayName": "AI Skills",
+  "version": "1.0.0",
+  "description": "AKShare 接口检索与执行、通用 Python 编码规范技能集",
+  "author": {
+    "name": "lvjixin"
+  },
+  "repository": "https://github.com/lvjixin/ai-skills",
+  "license": "MIT",
+  "skills": ["./akshare/", "./python-specifications/"]
+}
