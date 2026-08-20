@@ -1,0 +1,23 @@
+[project]
+name = "scripts"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "akshare>=1.18.92",
+]
+
+# 本项目是两个独立的 CLI 脚本而非包，显式声明避免 setuptools flat-layout 自动发现歧义
+[tool.setuptools]
+py-modules = ["call_interface", "search_interface"]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.411",
+    "ruff>=0.16.3",
+]
+
+# CLI 入口需要兜底 akshare 的全部异常（AkshareException 家族、网络、数据源错误），
+# 统一转为友好消息退出，属刻意设计，豁免盲捕获告警
+[tool.ruff.lint.per-file-ignores]
+"call_interface.py" = ["BLE001"]
+"search_interface.py" = ["BLE001"]
