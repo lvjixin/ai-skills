@@ -1,12 +1,38 @@
 # Python
 __pycache__/
 *.py[cod]
-.ruff_cache/
-
-# uv 虚拟环境
+*.pyo
+*.pyd
 .venv/
-
-# 构建产物
-dist/
+venv/
 build/
+dist/
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# 环境文件
+.env
+.env.local
+.env.*.local
+
+# 编辑器与操作系统
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+logs/
+
+
+# CodeGraph（本地索引文件不纳入版本控制）
+.codegraph/*
+
+.mise.*
+
+.claude/

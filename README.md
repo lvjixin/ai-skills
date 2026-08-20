@@ -7,6 +7,7 @@ Claude Code 技能集合仓库，供 [CC Switch](https://github.com/farion1231/c
 | 技能 | 目录 | 说明 |
 |---|---|---|
 | [akshare](akshare/) | `akshare/` | AKShare 金融数据库接口检索与执行：内置检索层定位 1000+ 接口，动态调用并落盘 CSV/JSON |
+| [python-specifications](python-specifications/) | `python-specifications/` | 通用 Python 编码规范：依赖选型、代码风格、类型安全、静态检查 |
 
 ## 安装方式
 
