@@ -12,9 +12,14 @@ py-modules = ["call_interface", "search_interface", "market_analysis"]
 
 [dependency-groups]
 dev = [
+    "pandas-stubs>=3.0.5.260730",
     "pyright>=1.1.411",
     "ruff>=0.16.3",
 ]
+
+# CLI 端 pyright 默认 basic 模式会漏报大量类型问题，显式启用 strict 对齐 IDE 检查强度
+[tool.pyright]
+typeCheckingMode = "strict"
 
 # CLI 入口需要兜底 akshare 的全部异常（AkshareException 家族、网络、数据源错误），
 # 统一转为友好消息退出，属刻意设计，豁免盲捕获告警
@@ -22,3 +27,4 @@ dev = [
 "call_interface.py" = ["BLE001"]
 "search_interface.py" = ["BLE001"]
 "market_analysis.py" = ["BLE001"]
+"fund_analysis.py" = ["BLE001"]

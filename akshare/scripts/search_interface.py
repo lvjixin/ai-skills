@@ -122,7 +122,8 @@ def render_info_text(info: dict[str, Any]) -> str:
         f"有无文档: {info.get('documented')}",
     ]
 
-    params = info.get("params") or []
+    # 元数据里 params/outputs 是字典列表，显式注解避免 or [] 推断出 Unknown
+    params: list[dict[str, Any]] = info.get("params") or []
     if params:
         lines.append("\n输入参数:")
         for param in params:
@@ -132,7 +133,7 @@ def render_info_text(info: dict[str, Any]) -> str:
     else:
         lines.append("\n输入参数: 无")
 
-    outputs = info.get("outputs") or []
+    outputs: list[dict[str, Any]] = info.get("outputs") or []
     if outputs:
         lines.append("\n输出字段:")
         for field in outputs:
@@ -166,10 +167,13 @@ def main() -> None:
     args = parser.parse_args()
 
     # Windows 终端默认 GBK 编码，重配为标准 UTF-8 保证中文正常显示
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(encoding="utf-8")
-    if isinstance(sys.stderr, io.TextIOWrapper):
-        sys.stderr.reconfigure(encoding="utf-8")
+    # 先落局部变量再收窄，避免对 sys 模块成员收窄引入 Unknown 类型参数
+    stdout = sys.stdout
+    stderr = sys.stderr
+    if isinstance(stdout, io.TextIOWrapper):
+        stdout.reconfigure(encoding="utf-8")
+    if isinstance(stderr, io.TextIOWrapper):
+        stderr.reconfigure(encoding="utf-8")
 
     try:
         if args.categories:

@@ -436,10 +436,13 @@ def main() -> None:
     """命令行入口，抓取数据并打印完整资金流报告。"""
 
     # Windows 终端默认 GBK 编码，重配为标准 UTF-8 保证中文正常显示
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(encoding="utf-8")
-    if isinstance(sys.stderr, io.TextIOWrapper):
-        sys.stderr.reconfigure(encoding="utf-8")
+    # 先落局部变量再收窄，避免对 sys 模块成员收窄引入 Unknown 类型参数
+    stdout = sys.stdout
+    stderr = sys.stderr
+    if isinstance(stdout, io.TextIOWrapper):
+        stdout.reconfigure(encoding="utf-8")
+    if isinstance(stderr, io.TextIOWrapper):
+        stderr.reconfigure(encoding="utf-8")
 
     try:
         print(render_report())

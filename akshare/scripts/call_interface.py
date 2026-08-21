@@ -18,7 +18,7 @@ import io
 import json
 import sys
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import akshare as ak
 import pandas as pd
@@ -43,7 +43,9 @@ def parse_params(raw: str) -> dict[str, Any]:
     parsed = json.loads(raw)
     if not isinstance(parsed, dict):
         raise TypeError("--params 必须是 JSON 对象")
-    return parsed
+
+    # isinstance 只能收窄到 dict[Unknown, Unknown]，用 cast 落定值类型
+    return cast("dict[str, Any]", parsed)
 
 
 def resolve_interface(name: str) -> Callable[..., Any]:
@@ -169,10 +171,13 @@ def main() -> None:
     args = parser.parse_args()
 
     # Windows 终端默认 GBK 编码，重配为标准 UTF-8 保证中文正常显示
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(encoding="utf-8")
-    if isinstance(sys.stderr, io.TextIOWrapper):
-        sys.stderr.reconfigure(encoding="utf-8")
+    # 先落局部变量再收窄，避免对 sys 模块成员收窄引入 Unknown 类型参数
+    stdout = sys.stdout
+    stderr = sys.stderr
+    if isinstance(stdout, io.TextIOWrapper):
+        stdout.reconfigure(encoding="utf-8")
+    if isinstance(stderr, io.TextIOWrapper):
+        stderr.reconfigure(encoding="utf-8")
 
     try:
         kwargs = parse_params(args.params) if args.params else {}
