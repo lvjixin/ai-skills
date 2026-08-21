@@ -1,9 +1,9 @@
 """板块轮动分析与基金推荐脚本。
 
-基于近 1 个月的行业资金流（同花顺 20 日排行）、当日重大财经快讯（东方财富）
+基于近 1 个月的行业资金流（同花顺 20 日排行）、近 1 个月的新闻联播文字稿
 与最新披露期业绩报表（东方财富）的行业业绩，对同花顺 90 个行业板块做
 资金 / 情绪 / 基本面三维打分，输出未来值得关注的板块、建议回避的板块，
-并按板块主题匹配近期表现领先的场外基金与 ETF 作为购入参考。
+并从全部关注板块中挑选近期动量最强的几只场外基金与 ETF 作为购入参考。
 
 用法示例:
     python sector_rotation.py
@@ -22,7 +22,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import ParamSpec, TypeVar
 
 import akshare as ak
@@ -36,8 +36,8 @@ from akshare.fund.fund_rank_em import (
 from akshare.fund.fund_rank_em import (
     fund_open_fund_rank_em as fetch_fund_rank_raw,
 )
-from akshare.stock_feature.stock_info import (
-    stock_info_global_em as fetch_headlines_raw_api,
+from akshare.news.news_cctv import (
+    news_cctv as fetch_news_cctv_api,
 )
 from akshare.stock_feature.stock_yjbb_em import (
     stock_yjbb_em as fetch_earnings_api,
@@ -69,8 +69,11 @@ EARNINGS_ZERO_SCORE = 15.0
 NEWS_BASE_SCORE = 10.0
 NEWS_STEP_SCORE = 2.0
 
-# 每个板块分别推荐的场外基金与 ETF 数量
-FUND_PICK_PER_SOURCE = 2
+# 全部关注板块合计推荐的基金/ETF 总数
+TOTAL_FUND_PICKS = 8
+
+# 新闻回溯交易日天数
+NEWS_LOOKBACK_DAYS = 22
 
 # 报告头条区展示的重要快讯条数
 HEADLINE_LIMIT = 6
@@ -459,29 +462,52 @@ def fetch_flow_today() -> pd.DataFrame:
     return ak.stock_fund_flow_industry(symbol="即时")
 
 
-@retry()
-def fetch_headlines_raw() -> pd.DataFrame:
-    """获取全球财经快讯原始表（东方财富，最多 200 条）。
+def recent_trading_days(today: date, days: int = 22) -> list[str]:
+    """生成从今天往前推的最近 N 个交易日（跳过周末）。
+
+    Args:
+        today: 基准日期。
+        days: 需要的交易日数量。
 
     Returns:
-        快讯表，含标题/摘要/发布时间等列。
+        日期字符串列表（YYYYMMDD），从近到远排序。
     """
 
-    return fetch_headlines_raw_api()
+    result: list[str] = []
+    current = today
+    while len(result) < days:
+        current -= timedelta(days=1)
+        if current.weekday() < 5:
+            result.append(current.strftime("%Y%m%d"))
+    return result
 
 
-def fetch_headlines() -> list[NewsItem]:
-    """获取当日全球财经快讯并转为新闻对象列表。
+def fetch_monthly_headlines() -> list[NewsItem]:
+    """获取近 1 个月的新闻联播文字稿用于板块情绪分析。
 
     Returns:
-        快讯列表，按时间倒序。
+        近 1 个月的新闻列表，按日期倒序。
     """
 
-    frame = fetch_headlines_raw()
-    return [
-        NewsItem(str(row["标题"]), str(row["摘要"]), str(row["发布时间"]))
-        for row in frame.to_dict("records")
-    ]
+    today = datetime.now().astimezone().date()
+    all_items: list[NewsItem] = []
+    for date_str in recent_trading_days(today, NEWS_LOOKBACK_DAYS):
+        try:
+            frame = fetch_news_cctv_api(date=date_str)
+            for row in frame.to_dict("records"):
+                all_items.append(
+                    NewsItem(
+                        标题=str(row["title"]),
+                        摘要=str(row["content"]),
+                        时间=f"{date_str[4:6]}-{date_str[6:8]}",
+                    )
+                )
+        except Exception as exc:
+            print(
+                f"[跳过] {date_str} 新闻获取失败: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+    return all_items
 
 
 @retry()
@@ -879,7 +905,7 @@ def rank_fund_frame(
         source: 来源标签（"场外"/"ETF"）。
 
     Returns:
-        去重后的推荐候选，最多 FUND_PICK_PER_SOURCE 只。
+        匹配候选列表，按动量降序（去重与总量限制由调用方处理）。
     """
 
     pattern = "|".join(keywords)
@@ -894,7 +920,7 @@ def rank_fund_frame(
         float
     )
     ranked = candidates.assign(_动量=momentum).sort_values("_动量", ascending=False)
-    picks = [
+    return [
         FundPick(
             代码=str(item["基金代码"]),
             简称=str(item["基金简称"]),
@@ -903,42 +929,45 @@ def rank_fund_frame(
             近3月=float(item["近3月"]),
             今年来=float(item["今年来"]) if pd.notna(item["今年来"]) else float("nan"),
         )
-        for item in ranked.head(FUND_PICK_PER_SOURCE * 2).to_dict("records")
+        for item in ranked.to_dict("records")
     ]
-    return dedupe_share_class(picks)[:FUND_PICK_PER_SOURCE]
-
-
-def pick_funds_for_sector(sector: str, sources: FundSources) -> list[FundPick]:
-    """为一个板块匹配场外基金与 ETF 推荐。
-
-    Args:
-        sector: 同花顺板块名。
-        sources: 基金排行数据源。
-
-    Returns:
-        推荐基金列表。
-    """
-
-    keywords = SECTOR_FUND_KEYWORDS.get(sector, (sector,))
-    return rank_fund_frame(sources.场外, keywords, "场外") + rank_fund_frame(
-        sources.ETF, keywords, "ETF"
-    )
 
 
 def build_recommendations(
     watch: list[SectorAssessment], sources: FundSources
 ) -> dict[str, list[FundPick]]:
-    """为全部值得关注板块生成基金推荐。
+    """从全部关注板块中挑选动量最强的基金/ETF 推荐。
 
     Args:
         watch: 值得关注板块列表。
         sources: 基金排行数据源。
 
     Returns:
-        板块名到推荐基金列表的字典。
+        板块名到推荐基金列表的字典，合计不超过 TOTAL_FUND_PICKS 只。
     """
 
-    return {item.板块: pick_funds_for_sector(item.板块, sources) for item in watch}
+    all_picks: list[tuple[FundPick, str]] = []
+    for item in watch:
+        keywords = SECTOR_FUND_KEYWORDS.get(item.板块, (item.板块,))
+        for pick in rank_fund_frame(sources.场外, keywords, "场外"):
+            all_picks.append((pick, item.板块))
+        for pick in rank_fund_frame(sources.ETF, keywords, "ETF"):
+            all_picks.append((pick, item.板块))
+    all_picks.sort(key=lambda x: x[0].近3月 + 0.5 * x[0].近1月, reverse=True)
+    seen: set[str] = set()
+    top: list[tuple[FundPick, str]] = []
+    for pick, sector in all_picks:
+        base = _SHARE_CLASS_RE.sub("", pick.简称)
+        if base in seen:
+            continue
+        seen.add(base)
+        top.append((pick, sector))
+        if len(top) >= TOTAL_FUND_PICKS:
+            break
+    result: dict[str, list[FundPick]] = {}
+    for pick, sector in top:
+        result.setdefault(sector, []).append(pick)
+    return result
 
 
 def flow_text(amount: float | None) -> str:
@@ -1009,7 +1038,7 @@ def render_sector(
         f"    依据: {assessment.依据}",
     ]
     for item in assessment.新闻统计.代表:
-        lines.append(f"    代表新闻: [{item.时间[11:16]}] {item.标题}")
+        lines.append(f"    代表新闻: [{item.时间}] {item.标题}")
     for pick in picks:
         lines.append(
             f"    推荐[{pick.来源}] {pick.简称}({pick.代码})"
@@ -1035,15 +1064,15 @@ def render_report(result: RotationResult) -> str:
         f"【板块轮动分析报告】生成时间 {result.生成时间}",
         (
             f"财报期 {result.数据.财报期}（已披露 {result.数据.披露家数} 家）"
-            f" | 行业数 {len(result.数据.flow)} | 快讯 {len(result.数据.headlines)} 条（当日）"
+            f" | 行业数 {len(result.数据.flow)} | 新闻 {len(result.数据.headlines)} 条（近1月）"
         ),
         "评分构成: 20日资金 40 + 当日资金 10 + 新闻情绪 20 + 财报基本面 30",
         "",
         "=" * 70,
-        "【一、当日重要财经快讯】",
+        "【一、近期重要新闻】",
     ]
     for item in pick_headlines(result.数据.headlines):
-        parts.append(f"  [{item.时间[11:16]}] {item.标题}")
+        parts.append(f"  [{item.时间}] {item.标题}")
 
     parts += ["", "=" * 70, "【二、未来值得关注的板块】"]
     for index, assessment in enumerate(result.关注列表, start=1):
@@ -1147,7 +1176,7 @@ def collect_market_data(quarter: str | None) -> MarketData:
     """
 
     flow = build_flow_table(fetch_flow_20d(), fetch_flow_today())
-    headlines = fetch_headlines()
+    headlines = fetch_monthly_headlines()
     财报期, earnings = fetch_earnings(quarter)
     earnings_map = build_earnings_map(earnings, flow["行业"].tolist())
     return MarketData(
